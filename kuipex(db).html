@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>kuipex</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Three.js for 3D Visualization - ADDED 'defer' attribute here -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js" defer></script>
+    <!-- Use Space Mono for a proper HUD/console look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <style>
+        /* --- CORE SCI-FI THEME VARIABLES --- */
+        :root {
+            --primary-color: #00e0ff; /* Neon Cyan */
+            --accent-color: #00ff88; /* Neon Green */
+            --warning-color: #ffb300; /* Neon Yellow/Orange */
+            --alert-color: #ff0000; /* Neon Red */
+            --primary-bg: #030a13; /* Very Dark Blue/Black */
+            --glow-shadow: 0 0 8px var(--primary-color), 0 0 15px rgba(0, 224, 255, 0.5);
+            --border-glow: 1px solid rgba(0, 224, 255, 0.4);
+        }
+
+        body {
+            background-color: var(--primary-bg);
+            font-family: 'Space Mono', 'Inter', monospace;
+            color: var(--primary-color);
+            min-height: 100vh;
+            /* Enhanced Background: Subtle nebula/starfield effect */
+            background-image: 
+                radial-gradient(circle at 10% 50%, rgba(0, 50, 80, 0.1) 1%, transparent 60%),
+                radial-gradient(circle at 90% 80%, rgba(0, 50, 80, 0.15) 1%, transparent 70%);
+            position: relative;
+            overflow-x: hidden;
+            padding: 2rem; /* Add more padding for better spacing */
+        }
+
+        /* Optional: Scanline effect for extra HUD feel */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                transparent,
+                transparent 1px,
+                rgba(0, 0, 0, 0.3) 2px,
+                rgba(0, 0, 0, 0.5) 3px
+            );
+            z-index: -1;
+            opacity: 0.15;
+        }
+
+        /* --- HUD PANEL STYLING --- */
+        .hud-panel {
+            background-color: rgba(0, 10, 20, 0.65);
+            border: var(--border-glow);
+            box-shadow: 0 0 10px rgba(0, 224, 255, 0.4), 0 0 20px rgba(0, 224, 255, 0.1);
+            border-radius: 0.75rem; /* Slightly rounder */
+            padding: 1.5rem;
+            backdrop-filter: blur(4px);
+            transition: all 0.3s ease;
+        }
+
+        .hud-panel:hover {
+            box-shadow: 0 0 15px var(--primary-color), 0 0 25px rgba(0, 224, 255, 0.6);
+            transform: translateY(-2px);
+            border-color: var(--primary-color);
+        }
+
+        .hud-title {
+            color: white;
+            text-shadow: 0 0 5px var(--primary-color);
+            letter-spacing: 0.15em;
+            font-size: 1.125rem;
+            margin-bottom: 0.75rem;
+            border-bottom: 2px solid rgba(0, 224, 255, 0.3);
+            padding-bottom: 0.5rem;
+            font-weight: 700;
+        }
+
+        /* --- HEADER & TITLE ANIMATION --- */
+        .main-title {
+            color: white;
+            text-shadow: 0 0 10px var(--primary-color), 0 0 20px rgba(0, 224, 255, 0.7);
+            animation: title-pulse 3s infinite alternate;
+        }
+
+        @keyframes title-pulse {
+            0% { opacity: 0.9; }
+            100% { opacity: 1; text-shadow: 0 0 12px var(--primary-color), 0 0 25px rgba(0, 224, 255, 0.8); }
+        }
+
+        /* --- CENTRAL VISUALIZATION (CANVAS) --- */
+        #three-d-viewer {
+            width: 100%;
+            height: 100%;
+            min-height: 400px; /* Ensure canvas has space */
+            border-radius: 0.5rem;
+            overflow: hidden;
+            display: block;
+        }
+        
+        /* Utility Classes for Data Display */
+        .data-value {
+            text-shadow: 0 0 5px var(--primary-color);
+        }
+
+        /* Input field style to blend with HUD */
+        #high-risk-sat {
+            background-color: transparent;
+            border: none;
+            border-bottom: 1px solid var(--alert-color);
+            color: var(--alert-color);
+            text-align: center;
+            padding: 0;
+            font-size: 14px; /* text-sm equivalent */
+            font-weight: 700; /* font-bold equivalent */
+            width: 10ch; /* Adjust width to fit typical satellite names */
+            transition: border-color 0.2s ease;
+        }
+
+        #high-risk-sat:focus {
+            outline: none;
+            border-bottom: 1px solid white;
+        }
+        
+        /* Style for the 3D tracking label */
+        #sat-name-label {
+            transform: translate(-50%, -100%); /* Center the label on its position and lift it above the object */
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 1px solid var(--alert-color);
+        }
+
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <!-- Header / Title Panel -->
+    <div class="text-center mb-8">
+        <h1 class="main-title text-3xl md:text-5xl font-bold uppercase tracking-widest">
+            kuipex
+        </h1>
+        <p class="text-sm md:text-base text-gray-400 mt-2">
+            Global Orbital Traffic Monitoring & Prediction Console
+        </p>
+    </div>
+
+    <!-- Main Grid Layout -->
+    <main id="dashboard" class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+
+        <!-- Column 1: Left Side Panels (Observation & Sensors) -->
+        <div class="lg:col-span-3 space-y-6">
+
+            <!-- Observation Association Panel -->
+            <div id="panel-observation" class="hud-panel h-auto">
+                <div class="hud-title">OBSERVATION ASSOCIATION</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>Tracks Processed:</span>
+                        <span id="tracks-processed" class="font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Tracks Accepted:</span>
+                        <span id="tracks-accepted" class="text-green-400 font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Tracks Rejected:</span>
+                        <span id="tracks-rejected" class="text-red-400 font-bold data-value"></span>
+                    </div>
+                    <div class="pt-4">
+                        <span class="block mb-1 text-xs uppercase tracking-wide">Accepted Rate: <span id="accepted-rate" class="font-bold"></span>%</span>
+                        <div class="w-full bg-gray-800 rounded-full h-2.5">
+                            <!-- Gradient Bar for Visual Appeal -->
+                            <div id="rate-bar" class="h-2.5 rounded-full transition-all duration-500" style="background: linear-gradient(90deg, var(--primary-color), var(--accent-color));"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Optical Sensor Panel -->
+            <div id="panel-optical" class="hud-panel h-auto">
+                <div class="hud-title">OPTICAL SENSORS (OP/IR)</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>Active Sites:</span>
+                        <span id="optical-sites" class="font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Total Observations (24h):</span>
+                        <span id="optical-obs" class="font-bold data-value"></span>
+                    </div>
+                    <div class="mt-4 border-t border-gray-700 pt-3">
+                        <span class="block mb-2 text-xs uppercase tracking-wide">Site Health Report:</span>
+                        <ul class="text-xs list-disc list-inside ml-2 space-y-1 text-gray-400">
+                            <li>Site 01: <span id="site-01-health" class="text-green-400 font-bold"></span></li>
+                            <li>Site 03: <span id="site-03-health" class="text-yellow-400 font-bold"></span></li>
+                            <li>Site 07: <span id="site-07-health" class="text-green-400 font-bold"></span></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Radar Sensor Panel -->
+            <div id="panel-radar" class="hud-panel h-auto">
+                <div class="hud-title">RADAR ASSETS (SSN)</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>System Status:</span>
+                        <span id="radar-status" class="text-green-400 font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Calibration:</span>
+                        <span id="radar-calib" class="text-yellow-400 font-bold data-value"></span>
+                    </div>
+                    <div class="mt-4">
+                        <span class="block mb-1 text-xs uppercase tracking-wide">Max Range Coverage:</span>
+                        <div id="radar-coverage" class="h-3 bg-gray-800 rounded-lg overflow-hidden">
+                            <div class="h-full bg-cyan-500 transition-all duration-500" style="width: 92%;"></div>
+                        </div>
+                        <p class="text-right text-xs mt-1 text-gray-500">92% Capacity</p>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Column 2: Center Main Display (Visualization & High Risk) -->
+        <div class="lg:col-span-6 flex flex-col space-y-6">
+
+            <!-- 3D Maneuver Simulation (New Core Visualization) -->
+            <div class="hud-panel flex-grow flex flex-col items-center justify-center p-0 min-h-[400px]">
+                <div class="hud-title w-full px-6 pt-6 pb-4 mb-0">3D ORBITAL MANEUVER SIMULATION</div>
+                <div id="viewer-container" class="flex-grow w-full h-full relative p-4">
+                     <!-- The Three.js Canvas will be appended here by the JS -->
+                     <canvas id="three-d-viewer" class="rounded-lg"></canvas>
+
+                     <!-- Overlay for Total Objects -->
+                    <div class="absolute top-0 left-0 p-3 bg-black/50 rounded-br-lg text-xs">
+                        <p class="text-gray-400">Cataloged Objects</p>
+                        <p class="text-xl font-extrabold data-value" id="total-objects-overlay"></p>
+                    </div>
+
+                    <!-- Overlay for Last Run -->
+                    <div class="absolute bottom-0 right-0 p-3 bg-black/50 rounded-tl-lg text-xs text-right">
+                        <p class="text-gray-400">Last Run:</p>
+                        <p class="font-bold" id="last-run-overlay"></p>
+                    </div>
+                    
+                    <!-- NEW: Overlay for High-Risk Satellite Name, tracks the 3D cube -->
+                    <!-- This label will track the TARGET SAT (Red Cube) -->
+                    <div id="sat-name-label" class="absolute text-sm font-bold text-red-400 bg-black/70 px-2 py-1 rounded-md pointer-events-none whitespace-nowrap hidden" style="text-shadow: 0 0 5px var(--alert-color);"></div>
+
+                </div>
+            </div>
+
+            <!-- Conjunction Assessment Risk Panel (Updated to include CAPA) -->
+            <div id="panel-conjunction" class="hud-panel h-auto">
+                <div class="hud-title flex justify-between items-center">
+                    <span>CONJUNCTION ASSESSMENT & RISK</span>
+                    <span id="risk-level" class="text-red-500 text-2xl font-extrabold data-value uppercase"></span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="text-gray-400">Total Conjunctions (24h):</p>
+                        <p id="total-conjunctions" class="text-2xl font-bold data-value"></p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400">High Probability Events:</p>
+                        <p id="high-prob-events" class="text-2xl font-bold text-red-400 data-value"></p>
+                    </div>
+                </div>
+
+                <!-- NEW: CAPA - Collision Avoidance Planning Advisor -->
+                <div class="mt-4 border-t border-gray-700 pt-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="block text-xs uppercase tracking-wide text-white font-bold">CAPA: RECOMMENDED ACTION (FOR 
+                             <!-- Input field for editable high-risk satellite name -->
+                            <input type="text" id="high-risk-sat" class="inline-block bg-transparent text-red-400 text-sm font-bold p-0 border-b border-red-400 focus:outline-none focus:border-white" style="width: 10ch; text-align: center;" value="">
+                            )</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-xs">
+                        <div class="p-2 bg-red-900/40 rounded-md">
+                            <p class="text-red-300">Optimal $\Delta V$</p>
+                            <p id="capa-delta-v" class="font-bold text-lg text-red-200 data-value"></p>
+                        </div>
+                        <div class="p-2 bg-cyan-900/40 rounded-md">
+                            <p class="text-cyan-300">Time-to-Maneuver</p>
+                            <p id="capa-ttm" class="font-bold text-lg text-cyan-200 data-value"></p>
+                        </div>
+                        <div class="p-2 bg-green-900/40 rounded-md">
+                            <p class="text-green-300">Mitigation Success $P_c$</p>
+                            <p id="capa-pc-success" class="font-bold text-lg text-green-200 data-value"></p>
+                        </div>
+                    </div>
+                </div>
+                <!-- End NEW CAPA Section -->
+                
+                <div class="mt-4 border-t border-gray-700 pt-3">
+                    <span class="block text-xs uppercase tracking-wide text-white font-bold mb-2">ORBIT LEGEND:</span>
+                    <div class="flex space-x-4 text-xs">
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-0.5 rounded-full" style="background-color: var(--alert-color);"></div>
+                            <span class="text-red-400">Target Path (Original)</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-0.5 rounded-full" style="background-color: var(--warning-color);"></div>
+                            <span class="text-yellow-400">Threat Path</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <div class="w-3 h-0.5 rounded-full" style="background-color: var(--accent-color);"></div>
+                            <span class="text-green-400">Safe Maneuver Path</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-span-2 mt-4">
+                    <span class="block mb-2 text-xs uppercase tracking-wide">Risk Trend (Last 6h):</span>
+                    <div class="h-4 bg-gray-700 rounded-lg overflow-hidden flex" id="risk-trend">
+                        <!-- JS will populate bar segments here -->
+                    </div>
+                    <p class="text-right text-xs mt-1 text-gray-500">Trend: Stable, High Baseline</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Right Side Panels (OD, Maneuver, Health) -->
+        <div class="lg:col-span-3 space-y-6">
+
+            <!-- Orbit Determination Panel -->
+            <div id="panel-orbit-det" class="hud-panel h-auto">
+                <div class="hud-title">ORBIT DETERMINATION (OD)</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>OD Runs (24h):</span>
+                        <span id="od-runs" class="font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Average RMS Error:</span>
+                        <span id="rms-error" class="text-yellow-400 font-bold data-value"></span>
+                    </div>
+                    <div class="pt-4">
+                        <span class="block mb-1 text-xs uppercase tracking-wide">Covariance Accuracy: <span id="cov-accuracy" class="font-bold text-green-400"></span>%</span>
+                        <div class="w-full h-2 bg-gray-800 rounded-full">
+                            <div id="cov-bar" class="h-2 rounded-full transition-all duration-500" style="background-color: var(--accent-color);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Maneuver Status Panel -->
+            <div id="panel-maneuver" class="hud-panel h-auto">
+                <div class="hud-title">MANEUVER STATUS (PRED.)</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>Confirmed Maneuvers (24h):</span>
+                        <span id="confirmed-maneuvers" class="font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Predicted Maneuvers (48h):</span>
+                        <span id="predicted-maneuvers" class="font-bold data-value"></span>
+                    </div>
+                    <div class="mt-4 border-t border-gray-700 pt-3">
+                        <span class="block mb-2 text-xs uppercase tracking-wide">Upcoming High Priority:</span>
+                        <ul class="text-xs list-disc list-inside ml-2 space-y-1">
+                            <li><span class="text-yellow-400 font-bold">SAT-4011:</span> 12.0h (LEO)</li>
+                            <li><span class="text-green-400 font-bold">ISS-R:</span> 36.5h (Planned)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health Panel -->
+            <div id="panel-system-health" class="hud-panel h-auto">
+                <div class="hud-title">SYSTEM HEALTH</div>
+                <div class="text-sm space-y-3">
+                    <div class="flex justify-between">
+                        <span>Core Processor Load:</span>
+                        <span id="cpu-load" class="text-green-400 font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Database Latency:</span>
+                        <span id="db-latency" class="text-yellow-400 font-bold data-value"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>Network Throughput:</span>
+                        <span id="network-throughput" class="text-green-400 font-bold data-value"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- MOCK DATA SIMULATION ---
+        const mockData = {
+            system: {
+                totalObjects: 18183,
+                lastRun: "04 OCT 2025 12:25:11",
+                riskLevel: "CRITICAL", 
+            },
+            observationAssociation: {
+                tracksProcessed: 11028,
+                tracksAccepted: 8880,
+                tracksRejected: 2148,
+                acceptedRate: 80.5,
+            },
+            optical: {
+                activeSites: 12,
+                totalObservations: 28905,
+                site01: "Nominal",
+                site03: "Degraded",
+                site07: "Nominal",
+            },
+            radar: {
+                status: "ONLINE",
+                calibration: "CHECK (1.2h)",
+            },
+            orbitDetermination: {
+                odRuns: 450,
+                rmsError: "1.24m",
+                covAccuracy: 95.5,
+            },
+            maneuver: {
+                confirmed: 2,
+                predicted: 5,
+            },
+            health: {
+                cpu: "32%",
+                dbLatency: "45ms",
+                networkThroughput: "980MB/s",
+            },
+            conjunction: {
+                total: 212,
+                highProb: 15,
+                highRiskSat: "STARLINK-4899", // Editable satellite name
+                capa: { 
+                    deltaV: "0.24 m/s",
+                    ttm: "10.5 hr",
+                    pcSuccess: "0.0001%",
+                },
+                riskSegments: [
+                    { value: 10, color: '#00e0ff' }, 
+                    { value: 15, color: '#00ff88' }, 
+                    { value: 35, color: '#ffb300' }, 
+                    { value: 40, color: '#ff0000' }
+                ]
+            }
+        };
+
+        // Utility function to simulate an API fetch
+        async function fetchData() {
+            return new Promise(resolve => {
+                setTimeout(() => resolve(mockData), 500);
+            });
+        }
+
+        // Function to set text content
+        function setText(id, content) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = content;
+            }
+        }
+        
+        // --- THREE.JS SIMULATION CODE ---
+
+        // Global variables for Three.js objects
+        let scene, camera, renderer, earth, targetSat, threatSat, satNameLabel;
+        let targetPath, threatPath, maneuverPath;
+
+        // Configuration for the two main orbits (Target and Threat) and the avoidance orbit
+        const ORBIT_CONFIG = {
+            // Target Sat (The high-risk asset, Red Cube)
+            TARGET: { 
+                radius: 5, 
+                inclination: 2, 
+                periodX: 1, 
+                periodY: 0.5, 
+                color: 0xff0000 
+            }, 
+            // Threat Sat (The collision risk, Yellow Sphere)
+            THREAT: { 
+                radius: 5.2, 
+                inclination: 1.8, 
+                periodX: 1.05, // Slightly different speed to create the near miss
+                periodY: 0.45, 
+                color: 0xffb300 
+            }, 
+            // Safe Maneuver Path (Recommended avoidance orbit, Green Line)
+            MANEUVER: { 
+                radius: 5.8, 
+                inclination: 2.1, 
+                periodX: 1.02,
+                periodY: 0.52,
+                color: 0x00ff88 
+            } 
+        };
+        
+        const NUM_PATH_POINTS = 100;
+
+
+        /**
+         * Calculates the position of the satellite based on time/phase and orbit parameters.
+         * @param {number} t Time or phase factor.
+         * @param {object} config Orbit configuration (radius, inclination, periodX, periodY).
+         * @returns {THREE.Vector3} 3D position vector.
+         */
+        function getSatellitePosition(t, config) {
+            const x = Math.cos(t * config.periodX) * config.radius;
+            const z = Math.sin(t * config.periodX) * config.radius;
+            const y = Math.sin(t * config.periodY) * config.inclination;
+            return new THREE.Vector3(x, y, z);
+        }
+
+        /**
+         * Generates the geometry for an orbital path.
+         * @param {object} config Orbit configuration.
+         * @returns {THREE.Line} A Three.js Line object.
+         */
+        function createOrbitalPath(config) {
+            const pathPoints = [];
+            for (let i = 0; i <= NUM_PATH_POINTS; i++) {
+                const t = (i / NUM_PATH_POINTS) * Math.PI * 2;
+                const position = getSatellitePosition(t, config);
+                pathPoints.push(position);
+            }
+
+            const pathGeometry = new THREE.BufferGeometry().setFromPoints(pathPoints);
+            const pathMaterial = new THREE.LineBasicMaterial({ 
+                color: config.color, 
+                linewidth: 2, 
+                transparent: true, 
+                opacity: 0.7 
+            });
+            return new THREE.Line(pathGeometry, pathMaterial);
+        }
+
+
+        /**
+         * Converts 3D world coordinates of the satellite to 2D screen coordinates
+         * and updates the position of the HTML label overlay.
+         */
+        function updateSatelliteLabel() {
+            if (!targetSat || !satNameLabel || !camera) return;
+
+            // 1. Get the Target satellite's position in world space
+            const vector = new THREE.Vector3();
+            targetSat.getWorldPosition(vector);
+            
+            // 2. Project the 3D position onto the screen
+            vector.project(camera);
+
+            // 3. Get container dimensions
+            const container = document.getElementById('viewer-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 4. Convert NDC to screen coordinates (pixels)
+            const x = (vector.x * 0.5 + 0.5) * width;
+            const y = (-vector.y * 0.5 + 0.5) * height;
+
+            // 5. Apply the position to the HTML label
+            satNameLabel.style.left = `${x}px`;
+            satNameLabel.style.top = `${y}px`;
+            
+            satNameLabel.style.display = 'block';
+        }
+
+
+        function initThreeD() {
+            const container = document.getElementById('viewer-container');
+            const canvas = document.getElementById('three-d-viewer');
+            
+            // 1. Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000); 
+            
+            // 2. Camera setup
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 10;
+            camera.position.y = 5;
+            camera.lookAt(0, 0, 0);
+
+            // 3. Renderer setup
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setClearColor(0x000000, 0); 
+            
+            // Get the HTML label element
+            satNameLabel = document.getElementById('sat-name-label');
+
+            // 4. Lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 5);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+            directionalLight.position.set(10, 10, 10);
+            scene.add(directionalLight);
+            
+            // 5. Earth (Center of the simulation)
+            const earthGeometry = new THREE.SphereGeometry(2, 32, 32);
+            const earthMaterial = new THREE.MeshPhongMaterial({
+                color: 0x003366, 
+                emissive: 0x003366, 
+                specular: 0x111111,
+                shininess: 100,
+                transparent: true,
+                opacity: 0.8
+            });
+            earth = new THREE.Mesh(earthGeometry, earthMaterial);
+            scene.add(earth);
+
+            // Add a subtle equatorial grid/ring system
+            const ringMaterial = new THREE.LineBasicMaterial({ color: 0x00e0ff, transparent: true, opacity: 0.3 });
+            const ringGeometry = new THREE.RingGeometry(3, 3.02, 64);
+            const ringMesh = new THREE.Mesh(ringGeometry, ringMaterial);
+            ringMesh.rotation.x = Math.PI / 2;
+            scene.add(ringMesh);
+
+            // 6. Target Satellite (Red Cube)
+            const targetGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+            const targetMat = new THREE.MeshBasicMaterial({ color: ORBIT_CONFIG.TARGET.color }); 
+            targetSat = new THREE.Mesh(targetGeo, targetMat);
+            scene.add(targetSat);
+            targetPath = createOrbitalPath(ORBIT_CONFIG.TARGET);
+            scene.add(targetPath);
+            
+            // 7. Threat Satellite (Yellow Sphere)
+            const threatGeo = new THREE.SphereGeometry(0.15, 16, 16);
+            const threatMat = new THREE.MeshBasicMaterial({ color: ORBIT_CONFIG.THREAT.color }); 
+            threatSat = new THREE.Mesh(threatGeo, threatMat);
+            scene.add(threatSat);
+            threatPath = createOrbitalPath(ORBIT_CONFIG.THREAT);
+            scene.add(threatPath);
+            
+            // 8. Safe Maneuver Path (Green Line - Static projection)
+            maneuverPath = createOrbitalPath(ORBIT_CONFIG.MANEUVER);
+            scene.add(maneuverPath);
+
+
+            // 9. Event Listeners for Resize (Responsiveness)
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // 10. Mouse Controls (Camera Movement)
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                previousMousePosition.x = e.clientX;
+                previousMousePosition.y = e.clientY;
+            });
+
+            canvas.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+
+                // Rotate the scene around the center (Earth)
+                scene.rotation.y += deltaX * 0.005;
+                scene.rotation.x += deltaY * 0.005;
+                
+                previousMousePosition.x = e.clientX;
+                previousMousePosition.y = e.clientY;
+            });
+
+            // The animate function will be called by the DOMContentLoaded listener
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('viewer-container');
+            if (camera && renderer && container) {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (earth && targetSat && threatSat) {
+                // Time factor for animation speed
+                const time = Date.now() * 0.0001; 
+
+                // Simulate Earth rotation
+                earth.rotation.y += 0.005;
+                
+                // Update Target Satellite position along its path
+                const targetPosition = getSatellitePosition(time, ORBIT_CONFIG.TARGET);
+                targetSat.position.copy(targetPosition);
+
+                // Update Threat Satellite position along its path
+                const threatPosition = getSatellitePosition(time + 10, ORBIT_CONFIG.THREAT); // +10 offset for initial separation
+                threatSat.position.copy(threatPosition);
+
+                // Update the 2D label position to follow the Target satellite
+                updateSatelliteLabel();
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- DASHBOARD DATA RENDER FUNCTION ---
+        async function renderDashboard() {
+            try {
+                const data = await fetchData();
+
+                // 1. Central Catalog Overlays
+                setText('total-objects-overlay', data.system.totalObjects.toLocaleString());
+                setText('last-run-overlay', data.system.lastRun);
+                setText('risk-level', data.system.riskLevel);
+                
+                const riskElement = document.getElementById('risk-level');
+                riskElement.className = riskElement.className.replace(/text-(red|yellow|green)-\d+/g, '');
+                if (data.system.riskLevel === 'CRITICAL') {
+                    riskElement.classList.add('text-red-500');
+                } else if (data.system.riskLevel === 'HIGH') {
+                    riskElement.classList.add('text-yellow-400');
+                } else {
+                    riskElement.classList.add('text-green-400');
+                }
+
+                // 2. Observation Association
+                setText('tracks-processed', data.observationAssociation.tracksProcessed.toLocaleString());
+                setText('tracks-accepted', data.observationAssociation.tracksAccepted.toLocaleString());
+                setText('tracks-rejected', data.observationAssociation.tracksRejected.toLocaleString());
+                setText('accepted-rate', data.observationAssociation.acceptedRate.toFixed(1));
+                
+                const rateBar = document.getElementById('rate-bar');
+                if (rateBar) rateBar.style.width = `${data.observationAssociation.acceptedRate}%`;
+
+                // 3. Sensor Panels
+                setText('optical-sites', data.optical.activeSites);
+                setText('optical-obs', data.optical.totalObservations.toLocaleString());
+                setText('site-01-health', data.optical.site01);
+                setText('site-03-health', data.optical.site03);
+                setText('site-07-health', data.optical.site07);
+
+                setText('radar-status', data.radar.status);
+                setText('radar-calib', data.radar.calibration);
+
+                // 4. Orbit Determination
+                setText('od-runs', data.orbitDetermination.odRuns.toLocaleString());
+                setText('rms-error', data.orbitDetermination.rmsError);
+                setText('cov-accuracy', data.orbitDetermination.covAccuracy.toFixed(1));
+                
+                const covBar = document.getElementById('cov-bar');
+                if (covBar) covBar.style.width = `${data.orbitDetermination.covAccuracy}%`;
+
+                // 5. Maneuver Status
+                setText('confirmed-maneuvers', data.maneuver.confirmed);
+                setText('predicted-maneuvers', data.maneuver.predicted);
+
+                // 6. System Health
+                setText('cpu-load', data.health.cpu);
+                setText('db-latency', data.health.dbLatency);
+                setText('network-throughput', data.health.networkThroughput);
+
+                // 7. Conjunction Assessment Risk (Including CAPA)
+                setText('total-conjunctions', data.conjunction.total);
+                setText('high-prob-events', data.conjunction.highProb);
+                
+                // Get the input and label elements
+                const highRiskSatInput = document.getElementById('high-risk-sat');
+                const satNameLabel = document.getElementById('sat-name-label');
+                
+                // Set the initial value for the input and the 3D label
+                if (highRiskSatInput) {
+                    highRiskSatInput.value = data.conjunction.highRiskSat;
+                }
+                if (satNameLabel) {
+                    satNameLabel.textContent = data.conjunction.highRiskSat;
+                }
+
+                // Add listener to update 3D label if user changes name in CAPA panel
+                if (highRiskSatInput) {
+                    highRiskSatInput.addEventListener('input', (e) => {
+                        const currentLabel = document.getElementById('sat-name-label');
+                        if (currentLabel) {
+                            currentLabel.textContent = e.target.value;
+                        }
+                    });
+                }
+                
+                // CAPA data
+                setText('capa-delta-v', data.conjunction.capa.deltaV);
+                setText('capa-ttm', data.conjunction.capa.ttm);
+                setText('capa-pc-success', data.conjunction.capa.pcSuccess);
+
+
+                // Render Risk Trend Bar
+                const riskTrendContainer = document.getElementById('risk-trend');
+                const totalRiskValue = data.conjunction.riskSegments.reduce((sum, seg) => sum + seg.value, 0);
+
+                riskTrendContainer.innerHTML = '';
+                data.conjunction.riskSegments.forEach(segment => {
+                    const widthPercent = (segment.value / totalRiskValue) * 100;
+                    const segmentDiv = document.createElement('div');
+                    segmentDiv.className = 'h-full transition-all duration-500';
+                    segmentDiv.style.width = `${widthPercent}%`;
+                    segmentDiv.style.backgroundColor = segment.color;
+                    segmentDiv.style.boxShadow = `inset 0 0 5px ${segment.color}40`;
+                    riskTrendContainer.appendChild(segmentDiv);
+                });
+
+
+            } catch (error) {
+                console.error("Failed to load dashboard data:", error);
+                const dashboard = document.getElementById('dashboard');
+                if (dashboard) {
+                    dashboard.innerHTML = '<div class="text-center text-red-500 hud-panel p-10 col-span-12">ERROR: Failed to load SSA data. Console logs may provide more details.</div>';
+                }
+            }
+        }
+
+        // --- NEW: Robust initialization using DOMContentLoaded ---
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if THREE is defined before attempting to initialize 3D
+            if (typeof THREE !== 'undefined') {
+                initThreeD();
+                animate(); // Start the animation loop
+                renderDashboard();
+            } else {
+                // Fallback for slower loads, though 'defer' should handle this
+                console.error("THREE.js library not loaded. Retrying initialization...");
+                // Simple retry mechanism (optional, but good for robustness)
+                setTimeout(function() {
+                    if (typeof THREE !== 'undefined') {
+                        initThreeD();
+                        animate();
+                        renderDashboard();
+                    } else {
+                        console.error("THREE.js failed to load after retry. Cannot run 3D simulation.");
+                    }
+                }, 500); 
+            }
+        });
+    </script>
+</body1>
+
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUIPEX - Space Situational Awareness Platform</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-background: #0a0a0a;
+            --color-primary: #00bfff;
+            --color-secondary: #1a1a2e;
+            --color-accent: #16213e;
+            --color-success: #00ff88;
+            --color-warning: #f9d71c;
+            --color-danger: #ff4757;
+            --color-text: #ffffff;
+            --color-text-dim: #b0b0b0;
+            --gradient-primary: linear-gradient(135deg, #00bfff, #0080ff);
+            --gradient-danger: linear-gradient(135deg, #ff4757, #ff6b6b);
+            --gradient-success: linear-gradient(135deg, #00ff88, #00cc6a);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', 'Courier New', monospace;
+            background: var(--color-background);
+            color: var(--color-text);
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(0, 191, 255, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(0, 255, 136, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 40% 60%, rgba(255, 71, 87, 0.02) 0%, transparent 50%);
+            animation: backgroundShift 20s ease-in-out infinite;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.6; }
+        }
+
+        /* Navigation */
+        .navbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(10, 10, 10, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--color-primary);
+            z-index: 1000;
+            padding: 15px 0;
+        }
+
+        .nav-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+        }
+
+        .logo {
+            font-family: 'Orbitron', monospace;
+            font-size: 28px;
+            font-weight: 900;
+            color: var(--color-primary);
+            text-shadow: 0 0 15px var(--color-primary), 0 0 30px var(--color-primary);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .nav-menu {
+            display: flex;
+            list-style: none;
+            gap: 30px;
+        }
+
+        .nav-menu a {
+            color: var(--color-text);
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-menu a:hover {
+            color: var(--color-primary);
+            background: rgba(0, 191, 255, 0.1);
+            box-shadow: 0 0 15px rgba(0, 191, 255, 0.3);
+        }
+
+        .nav-menu a.active {
+            color: var(--color-primary);
+            background: rgba(0, 191, 255, 0.2);
+        }
+
+    
+        /* Hero Section */
+        .hero {
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-content {
+            max-width: 800px;
+            z-index: 2;
+        }
+
+        .hero h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 4.5rem;
+            font-weight: 900;
+            margin-bottom: 20px;
+            background: var(--gradient-primary);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: glow 2s ease-in-out infinite alternate;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+
+        .hero p {
+            font-size: 1.5rem;
+            color: var(--color-text-dim);
+            margin-bottom: 40px;
+            line-height: 1.6;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+
+        .stat-card {
+            background: rgba(26, 26, 46, 0.8);
+            border: 1px solid var(--color-primary);
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 191, 255, 0.2);
+            border-color: var(--color-success);
+        }
+
+        .stat-number {
+            font-family: 'Orbitron', monospace;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px var(--color-primary);
+        }
+
+        .stat-label {
+            color: var(--color-text-dim);
+            font-size: 1rem;
+        }
+
+        /* 3D Globe Animation */
+        .globe-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 400px;
+            height: 400px;
+            perspective: 1000px;
+            z-index: 1;
+        }
+
+        .globe {
+            width: 200px;
+            height: 200px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #4a90e2, #1e3a8a);
+            box-shadow: 0 0 50px rgba(0, 191, 255, 0.5);
+            animation: rotate3d 20s linear infinite;
+        }
+
+        .satellite {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: var(--color-warning);
+            border-radius: 50%;
+            box-shadow: 0 0 15px currentColor;
+            animation: satelliteOrbit 10s linear infinite;
+        }
+
+        .satellite.blue {
+            background: var(--color-primary);
+            color: var(--color-primary);
+        }
+
+        @keyframes rotate3d {
+            from { transform: translate(-50%, -50%) rotateY(0deg); }
+            to { transform: translate(-50%, -50%) rotateY(360deg); }
+        }
+
+        @keyframes satelliteOrbit {
+            from { transform: rotate(0deg) translateX(150px) rotate(0deg); }
+            to { transform: rotate(360deg) translateX(150px) rotate(-360deg); }
+        }
+
+        @keyframes glow {
+            from { text-shadow: 0 0 20px var(--color-primary); }
+            to { text-shadow: 0 0 30px var(--color-primary), 0 0 40px var(--color-primary); }
+        }
+
+        /* Features Section */
+        .features {
+            padding: 100px 0;
+            background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .section-title {
+            font-family: 'Orbitron', monospace;
+            text-align: center;
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 60px;
+            color: var(--color-primary);
+            text-shadow: 0 0 15px var(--color-primary);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+        }
+
+        .feature-card {
+            background: rgba(26, 26, 46, 0.8);
+            border: 1px solid var(--color-primary);
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 191, 255, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .feature-card:hover::before {
+            left: 100%;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 40px rgba(0, 191, 255, 0.3);
+            border-color: var(--color-success);
+        }
+
+        .feature-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: var(--color-primary);
+        }
+
+        .feature-card h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--color-primary);
+            text-shadow: 0 0 10px var(--color-primary);
+            letter-spacing: 1px;
+        }
+
+        .feature-card p {
+            color: var(--color-text-dim);
+            line-height: 1.6;
+        }
+
+        /* CTA Section */
+        .cta {
+            padding: 100px 0;
+            text-align: center;
+            background: linear-gradient(135deg, var(--color-accent), var(--color-secondary));
+        }
+
+        .cta h2 {
+            font-family: 'Orbitron', monospace;
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--color-primary);
+            text-shadow: 0 0 15px var(--color-primary);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .cta p {
+            font-size: 1.2rem;
+            color: var(--color-text-dim);
+            margin-bottom: 40px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: var(--gradient-primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 20px rgba(0, 191, 255, 0.4);
+        }
+
+        .btn-danger {
+            background: var(--gradient-danger);
+        }
+
+        .btn-success {
+            background: var(--gradient-success);
+        }
+
+        /* Footer */
+        .footer {
+            background: linear-gradient(135deg, var(--color-secondary), var(--color-accent));
+            padding: 60px 0 40px;
+            border-top: 2px solid var(--color-primary);
+            position: relative;
+        }
+
+        .footer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+        }
+
+        .footer-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            margin-bottom: 40px;
+        }
+
+        .footer-section h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--color-primary);
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px var(--color-primary);
+            letter-spacing: 1px;
+        }
+
+        .footer-section p {
+            color: var(--color-text-dim);
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .contact-form {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--color-primary);
+            border-radius: 10px;
+            padding: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            color: var(--color-primary);
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--color-primary);
+            border-radius: 5px;
+            color: var(--color-text);
+            font-family: 'Rajdhani', monospace;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--color-success);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+        }
+
+        .form-group textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        .submit-btn {
+            background: var(--gradient-primary);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: 'Rajdhani', monospace;
+            font-size: 1rem;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 191, 255, 0.4);
+        }
+
+        .company-info {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--color-primary);
+            border-radius: 10px;
+            padding: 30px;
+        }
+
+        .company-details {
+            margin-bottom: 30px;
+        }
+
+        .company-details h4 {
+            color: var(--color-primary);
+            font-size: 1.2rem;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .company-details p {
+            color: var(--color-text-dim);
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .social-link {
+            display: inline-block;
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 191, 255, 0.1);
+            border: 1px solid var(--color-primary);
+            border-radius: 50%;
+            text-align: center;
+            line-height: 40px;
+            color: var(--color-primary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+
+        .social-link:hover {
+            background: rgba(0, 191, 255, 0.3);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 191, 255, 0.3);
+        }
+
+        .footer-bottom {
+            text-align: center;
+            padding-top: 30px;
+            border-top: 1px solid rgba(0, 191, 255, 0.2);
+        }
+
+        .footer-bottom p {
+            color: var(--color-text-dim);
+            font-size: 0.9rem;
+        }
+
+        /* Responsive Footer */
+        @media (max-width: 768px) {
+            .footer-content {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .contact-form,
+            .company-info {
+                padding: 20px;
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero p {
+                font-size: 1.2rem;
+            }
+
+            .hero-stats {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 20px;
+            }
+
+            .globe-container {
+                width: 300px;
+                height: 300px;
+            }
+
+            .globe {
+                width: 150px;
+                height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">KUIPEX</div>
+            <ul class="nav-menu">
+                <li><a href="#home" class="active">Home</a></li>
+                <li><a href="satellites.html">Satellite Catalog</a></li>
+                <li><a href="orbital.html">Orbital Analysis</a></li>
+                <li><a href="health.html">System Health</a></li>
+                <li><a href="recovery.html">Recovery Orbits</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero" id="home">
+        <div class="hero-content">
+            <h1>KUIPEX</h1>
+            <p>Advanced Global Orbital Traffic Monitoring & Prediction Console</p>
+            
+            <div class="hero-stats">
+                <a href="satellites.html" class="stat-card">
+                    <div class="stat-number" id="total-objects">18,183</div>
+                    <div class="stat-label">Cataloged Objects</div>
+                </a>
+                <a href="satellites.html" class="stat-card">
+                    <div class="stat-number" id="active-satellites">4,852</div>
+                    <div class="stat-label">Active Satellites</div>
+                </a>
+                <a href="orbital.html" class="stat-card">
+                    <div class="stat-number" id="conjunctions">212</div>
+                    <div class="stat-label">Daily Conjunctions</div>
+                </a>
+                <a href="recovery.html" class="stat-card">
+                    <div class="stat-number" id="collision-risk">15</div>
+                    <div class="stat-label">High Risk Events</div>
+                </a>
+            </div>
+
+            <div style="margin-top: 40px;">
+                <a href="satellites.html" class="btn">Explore Satellite Catalog</a>
+                <a href="orbital.html" class="btn btn-success" style="margin-left: 20px;">Orbital Analysis</a>
+            </div>
+        </div>
+
+        <!-- 3D Globe Animation -->
+        <div class="globe-container">
+            <div class="globe"></div>
+            <div class="satellite blue"></div>
+            <div class="satellite"></div>
+            <div class="satellite blue"></div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features">
+        <div class="container">
+            <h2 class="section-title">Advanced Monitoring Capabilities</h2>
+            <div class="features-grid">
+                <a href="satellites.html" class="feature-card">
+                    <div class="feature-icon">🛰️</div>
+                    <h3>Satellite Catalog Management</h3>
+                    <p>Comprehensive database of all tracked space objects with real-time updates, orbital parameters, and collision risk assessment.</p>
+                </a>
+                <a href="orbital.html" class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Orbital Determination</h3>
+                    <p>Advanced algorithms for precise orbit calculation, trajectory prediction, and covariance analysis with sub-meter accuracy.</p>
+                </a>
+                <a href="health.html" class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>System Health Monitoring</h3>
+                    <p>Real-time monitoring of ground stations, sensor networks, and processing systems with automated alert systems.</p>
+                </a>
+                <a href="recovery.html" class="feature-card">
+                    <div class="feature-icon">🚀</div>
+                    <h3>Recovery Orbit Planning</h3>
+                    <p>Intelligent maneuver planning for high-risk satellites with optimal delta-V calculations and collision avoidance strategies.</p>
+                </a>
+                <a href="orbital.html" class="feature-card">
+                    <div class="feature-icon">🔮</div>
+                    <h3>Predictive Analytics</h3>
+                    <p>Machine learning algorithms for long-term orbital evolution prediction and debris growth modeling.</p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="cta">
+        <div class="container">
+            <h2>Ready to Monitor Space?</h2>
+            <p>Access our comprehensive space situational awareness platform</p>
+            <a href="satellites.html" class="btn">Get Started</a>
+            <a href="health.html" class="btn btn-danger" style="margin-left: 20px;">Emergency Protocols</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <!-- Contact Form Section -->
+                <div class="footer-section">
+                    <h3>Send us a Message</h3>
+                    <div class="contact-form">
+                        <form id="contactForm">
+                            <div class="form-group">
+                                <label for="name">Name</label>
+                                <input type="text" id="name" name="name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="email">Email</label>
+                                <input type="email" id="email" name="email" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="subject">Subject</label>
+                                <input type="text" id="subject" name="subject" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="message">Message</label>
+                                <textarea id="message" name="message" required></textarea>
+                            </div>
+                            <button type="submit" class="submit-btn">Send Message</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Company Information Section -->
+                <div class="footer-section">
+                    <h3>Contact Information</h3>
+                    <div class="company-info">
+                        <div class="company-details">
+                            <h4>KUIPEX Technologies</h4>
+                            <p><strong>Address:</strong></p>
+                            <p>Plot No. 15, Industrial Area</p>
+                            <p>MIDC, Nashik - 422010</p>
+                            <p>Maharashtra, India</p>
+                            
+                            <p><strong>Email:</strong> contact@kuipex.space</p>
+                            <p><strong>Phone:</strong> +91 253 123 4567</p>
+                            <p><strong>Support:</strong> support@kuipex.space</p>
+                            <p><strong>Business:</strong> business@kuipex.space</p>
+                            
+                            <p><strong>Office Hours:</strong></p>
+                            <p>Monday - Friday: 9:00 AM - 6:00 PM IST</p>
+                            <p>Emergency Support: 24/7</p>
+                        </div>
+                        
+                        <div class="social-links">
+                            <a href="#" class="social-link" title="LinkedIn">📧</a>
+                            <a href="#" class="social-link" title="Twitter">🐦</a>
+                            <a href="#" class="social-link" title="GitHub">💻</a>
+                            <a href="#" class="social-link" title="YouTube">📺</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <p>&copy; 2025 KUIPEX Technologies. All rights reserved. | Space Situational Awareness Platform</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Dynamic data updates
+        function updateStats() {
+            const objects = document.getElementById('total-objects');
+            const satellites = document.getElementById('active-satellites');
+            const conjunctions = document.getElementById('conjunctions');
+            const risk = document.getElementById('collision-risk');
+
+            // Simulate real-time data changes
+            const baseObjects = 18183;
+            const baseSatellites = 4852;
+            const baseConjunctions = 212;
+            const baseRisk = 15;
+
+            objects.textContent = (baseObjects + Math.floor(Math.random() * 20 - 10)).toLocaleString();
+            satellites.textContent = (baseSatellites + Math.floor(Math.random() * 10 - 5)).toLocaleString();
+            conjunctions.textContent = (baseConjunctions + Math.floor(Math.random() * 15 - 7)).toLocaleString();
+            risk.textContent = (baseRisk + Math.floor(Math.random() * 5 - 2));
+        }
+
+        // Smooth scrolling for navigation
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Initialize
+        updateStats();
+        setInterval(updateStats, 3000);
+
+        // Add scroll effect to navbar
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 100) {
+                navbar.style.background = 'rgba(10, 10, 10, 0.98)';
+            } else {
+                navbar.style.background = 'rgba(10, 10, 10, 0.95)';
+            }
+        });
+
+        // Contact form handling
+        document.getElementById('contactForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const name = formData.get('name');
+            const email = formData.get('email');
+            const subject = formData.get('subject');
+            const message = formData.get('message');
+            
+            // Simulate form submission
+            alert(`Thank you, ${name}! Your message has been sent to KUIPEX Technologies. We'll get back to you at ${email} within 24 hours.`);
+            
+            // Reset form
+            this.reset();
+        });
+    </script>
+</body>
+</html>
